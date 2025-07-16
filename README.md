@@ -23,6 +23,11 @@ On Debian/Ubuntu systems `mdbtools` can be installed via `apt`:
 sudo apt-get install mdbtools
 ```
 
+On Windows you will need to install a compatible build of `mdbtools` and
+ensure the commands `mdb-tables` and `mdb-export` are available on your
+`PATH`. One approach is to use the Windows Subsystem for Linux (WSL) and
+install `mdbtools` inside the Linux environment.
+
 ## Running
 
 Start the server with:

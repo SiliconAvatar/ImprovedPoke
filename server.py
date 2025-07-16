@@ -68,6 +68,11 @@ def upload_file():
                         'table': first,
                         'data': '\n'.join(data.splitlines()[:5])
                     }
+            except FileNotFoundError:
+                preview = {
+                    'table': 'Error',
+                    'data': 'mdbtools utilities not found. Please install mdbtools and ensure it is in your PATH.'
+                }
             finally:
                 os.remove(mdb_path)
     return render_template_string(HTML_TEMPLATE, tables=tables, preview=preview)
