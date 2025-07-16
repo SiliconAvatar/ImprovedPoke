@@ -9,13 +9,27 @@ HTML_TEMPLATE = """
 <head>
   <meta charset='utf-8'>
   <title>MDB Reader</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    #file-name { margin-left: 10px; }
+  </style>
 </head>
 <body>
   <h1>Upload MDB File</h1>
   <form method="post" enctype="multipart/form-data">
-    <input type="file" name="file">
-    <input type="submit" value="Upload">
+    <input id="mdb-file" type="file" name="file" accept=".mdb" style="display:none" />
+    <button type="button" onclick="document.getElementById('mdb-file').click()">Select File</button>
+    <span id="file-name"></span>
+    <button type="submit">Upload</button>
   </form>
+  <script>
+    const input = document.getElementById('mdb-file');
+    const fileName = document.getElementById('file-name');
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      fileName.textContent = file ? file.name : '';
+    });
+  </script>
   {% if tables %}
   <h2>Tables</h2>
   <ul>
