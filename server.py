@@ -154,7 +154,7 @@ def update_instruments_from_excel(mdb_path: str, excel_path: str) -> int:
             if sheet_name not in wb.sheetnames:
                 raise ValueError(f'Sheet {sheet_name} missing from Excel file')
             ws = wb[sheet_name]
-            header = [cell.value for cell in next(ws.iter_rows(max_row=1, values_only=True))]
+            header = list(next(ws.iter_rows(max_row=1, values_only=True)))
             if header != expected_header:
                 raise ValueError(f'Invalid header in sheet {sheet_name}')
 
