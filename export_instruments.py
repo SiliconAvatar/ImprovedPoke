@@ -27,7 +27,7 @@ def main():
             print('Instruments table not found in the MDB file.')
             return
         query = (
-            "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh, "
+            "SELECT ID, Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh, "
             "HALM_EN, HALM_SP, HALM_DB, HALM_DLY, "
             "HWARN_EN, HWARN_SP, HWARN_DB, HWARN_DLY, "
             "LALM_EN, LALM_SP, LALM_DB, LALM_DLY, "
@@ -52,6 +52,7 @@ def main():
         return
 
     header = [
+        'ID',
         'Tag',
         'FullDescription',
         'EGULow',

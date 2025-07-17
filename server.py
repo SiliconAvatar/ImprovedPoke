@@ -3,7 +3,7 @@ import tempfile
 
 import pyodbc
 from flask import Flask, request, render_template_string, send_file, after_this_request
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 
 def export_instruments_to_excel(mdb_path: str, xlsx_path: str) -> int:
@@ -28,7 +28,7 @@ def export_instruments_to_excel(mdb_path: str, xlsx_path: str) -> int:
         raise ValueError('Instruments table not found')
 
     query = (
-        "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh, "
+        "SELECT ID, Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh, "
         "HALM_EN, HALM_SP, HALM_DB, HALM_DLY, "
         "HWARN_EN, HWARN_SP, HWARN_DB, HWARN_DLY, "
         "LALM_EN, LALM_SP, LALM_DB, LALM_DLY, "
@@ -40,6 +40,7 @@ def export_instruments_to_excel(mdb_path: str, xlsx_path: str) -> int:
     rows = cursor.fetchall()
 
     header = [
+        'ID',
         'Tag',
         'FullDescription',
         'EGULow',
@@ -96,6 +97,110 @@ def export_instruments_to_excel(mdb_path: str, xlsx_path: str) -> int:
     conn.close()
     return sum(len(v) for v in categories.values())
 
+
+def update_instruments_from_excel(mdb_path: str, excel_path: str) -> int:
+    """Update the Instruments table using data from an exported Excel workbook.
+
+    The Excel file must contain sheets named DigitalInput, DigitalOutput,
+    AnalogInput and AnalogOutput with the same columns as produced by
+    ``export_instruments_to_excel``. Only rows with matching ``ID`` and ``Tag``
+    are updated. The function returns the number of rows that were modified.
+    """
+
+    expected_header = [
+        'ID',
+        'Tag',
+        'FullDescription',
+        'EGULow',
+        'EGUHigh',
+        'RawLow',
+        'RawHigh',
+        'HALM_EN',
+        'HALM_SP',
+        'HALM_DB',
+        'HALM_DLY',
+        'HWARN_EN',
+        'HWARN_SP',
+        'HWARN_DB',
+        'HWARN_DLY',
+        'LALM_EN',
+        'LALM_SP',
+        'LALM_DB',
+        'LALM_DLY',
+        'LWARN_EN',
+        'LWARN_SP',
+        'LWARN_DB',
+        'LWARN_DLY',
+    ]
+
+    wb = load_workbook(excel_path, data_only=True)
+
+    conn_str = (
+        r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
+        f'DBQ={mdb_path};'
+    )
+    conn = pyodbc.connect(conn_str, autocommit=False)
+    cursor = conn.cursor()
+
+    table_names = [row.table_name for row in cursor.tables(tableType='TABLE')]
+    if 'Instruments' not in table_names:
+        conn.close()
+        raise ValueError('Instruments table not found')
+
+    total_updates = 0
+
+    try:
+        for sheet_name in ['DigitalInput', 'DigitalOutput', 'AnalogInput', 'AnalogOutput']:
+            if sheet_name not in wb.sheetnames:
+                raise ValueError(f'Sheet {sheet_name} missing from Excel file')
+            ws = wb[sheet_name]
+            header = [cell.value for cell in next(ws.iter_rows(max_row=1, values_only=True))]
+            if header != expected_header:
+                raise ValueError(f'Invalid header in sheet {sheet_name}')
+
+            for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if all(cell is None for cell in row):
+                    continue
+                data = dict(zip(expected_header, row))
+
+                id_val = data['ID']
+                tag_val = data['Tag']
+                cursor.execute(
+                    'SELECT ' + ', '.join(expected_header) + ' FROM Instruments WHERE ID=? AND Tag=?',
+                    (id_val, tag_val)
+                )
+                db_row = cursor.fetchone()
+                if not db_row:
+                    raise ValueError(f'Row {row_idx} in sheet {sheet_name} has unknown ID/Tag')
+
+                updates = []
+                params = []
+                for col in expected_header:
+                    if col in ('ID', 'Tag'):
+                        continue
+                    excel_val = data[col]
+                    db_val = getattr(db_row, col)
+                    if excel_val != db_val:
+                        updates.append(f'{col}=?')
+                        params.append(excel_val)
+
+                if updates:
+                    params.extend([id_val, tag_val])
+                    cursor.execute(
+                        f"UPDATE Instruments SET {', '.join(updates)} WHERE ID=? AND Tag=?",
+                        params
+                    )
+                    total_updates += 1
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return total_updates
+
 HTML_TEMPLATE = """
 <!doctype html>
 <html lang='en'>
@@ -133,8 +238,57 @@ HTML_TEMPLATE = """
 </html>
 """
 
+IMPORT_TEMPLATE = """
+<!doctype html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <title>Update MDB</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    .file-name { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Update MDB From Excel</h1>
+  <form method="post" enctype="multipart/form-data">
+    <input id="mdb" type="file" name="mdb" accept=".mdb" style="display:none" />
+    <button type="button" onclick="document.getElementById('mdb').click()">Select MDB</button>
+    <span id="mdb-name" class="file-name"></span>
+    <br/><br/>
+    <input id="excel" type="file" name="excel" accept=".xlsx" style="display:none" />
+    <button type="button" onclick="document.getElementById('excel').click()">Select Excel</button>
+    <span id="excel-name" class="file-name"></span>
+    <br/><br/>
+    <button type="submit">Upload</button>
+  </form>
+  <script>
+    const mdbInput = document.getElementById('mdb');
+    const mdbName = document.getElementById('mdb-name');
+    mdbInput.addEventListener('change', () => {
+      const file = mdbInput.files[0];
+      mdbName.textContent = file ? file.name : '';
+    });
+    const excelInput = document.getElementById('excel');
+    const excelName = document.getElementById('excel-name');
+    excelInput.addEventListener('change', () => {
+      const file = excelInput.files[0];
+      excelName.textContent = file ? file.name : '';
+    });
+  </script>
+  {% if message %}
+  <p>{{ message }}</p>
+  {% endif %}
+  {% if mdb_available %}
+  <p><a href="{{ url_for('download_updated_mdb') }}">Download Updated MDB</a></p>
+  {% endif %}
+</body>
+</html>
+"""
+
 app = Flask(__name__)
 app.config['EXCEL_PATH'] = None
+app.config['UPDATED_MDB_PATH'] = None
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
@@ -203,6 +357,62 @@ def download_excel():
         return response
 
     return send_file(xlsx_path, as_attachment=True, download_name='instruments.xlsx')
+
+
+@app.route('/import', methods=['GET', 'POST'])
+def import_excel():
+    message = None
+    mdb_available = False
+
+    if request.method == 'POST':
+        mdb_file = request.files.get('mdb')
+        excel_file = request.files.get('excel')
+        if mdb_file and excel_file and mdb_file.filename and excel_file.filename:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mdb') as mdb_tmp:
+                mdb_file.save(mdb_tmp.name)
+                mdb_path = mdb_tmp.name
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as xls_tmp:
+                excel_file.save(xls_tmp.name)
+                xlsx_path = xls_tmp.name
+
+            try:
+                updated = update_instruments_from_excel(mdb_path, xlsx_path)
+                app.config['UPDATED_MDB_PATH'] = mdb_path
+                mdb_available = True
+                message = f'MDB updated successfully. {updated} rows modified.'
+            except Exception as e:
+                message = f'Error updating MDB: {e}'
+                os.remove(mdb_path)
+            finally:
+                os.remove(xlsx_path)
+        else:
+            message = 'Both MDB and Excel files are required.'
+
+    return render_template_string(
+        IMPORT_TEMPLATE,
+        message=message,
+        mdb_available=mdb_available,
+    )
+
+
+@app.route('/download_updated_mdb')
+def download_updated_mdb():
+    """Allow the user to download the updated MDB file."""
+    mdb_path = app.config.get('UPDATED_MDB_PATH')
+    if not mdb_path or not os.path.exists(mdb_path):
+        return "No MDB file available", 404
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(mdb_path)
+        except Exception:
+            pass
+        app.config['UPDATED_MDB_PATH'] = None
+        return response
+
+    return send_file(mdb_path, as_attachment=True, download_name='updated.mdb')
 
 if __name__ == '__main__':
     app.run(debug=True)
