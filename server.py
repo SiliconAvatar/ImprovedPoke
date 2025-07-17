@@ -2,7 +2,15 @@ import os
 import tempfile
 
 import pyodbc
-from flask import Flask, request, render_template_string, send_file, after_this_request
+from flask import (
+    Flask,
+    request,
+    render_template_string,
+    send_file,
+    after_this_request,
+    redirect,
+    url_for,
+)
 from openpyxl import Workbook, load_workbook
 
 
@@ -201,39 +209,66 @@ def update_instruments_from_excel(mdb_path: str, excel_path: str) -> int:
 
     return total_updates
 
-HTML_TEMPLATE = """
+HOME_TEMPLATE = """
 <!doctype html>
 <html lang='en'>
 <head>
   <meta charset='utf-8'>
-  <title>MDB Reader</title>
+  <title>MDB Tools</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; }
-    #file-name { margin-left: 10px; }
+    body { font-family: Arial, sans-serif; background:#f2f2f2; margin:40px; }
+    .container { max-width: 600px; margin:auto; background:#fff; padding:40px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); text-align:center; }
+    a.button { display:inline-block; padding:12px 24px; margin:10px; text-decoration:none; background:#007BFF; color:#fff; border-radius:4px; }
   </style>
 </head>
 <body>
-  <h1>Upload MDB File</h1>
-  <form method="post" enctype="multipart/form-data">
-    <input id="mdb-file" type="file" name="file" accept=".mdb" style="display:none" />
-    <button type="button" onclick="document.getElementById('mdb-file').click()">Select File</button>
-    <span id="file-name"></span>
-    <button type="submit">Upload</button>
-  </form>
-  <script>
-    const input = document.getElementById('mdb-file');
-    const fileName = document.getElementById('file-name');
-    input.addEventListener('change', () => {
-      const file = input.files[0];
-      fileName.textContent = file ? file.name : '';
-    });
-  </script>
-  {% if message %}
-  <p>{{ message }}</p>
-  {% endif %}
-  {% if excel_available %}
-  <p><a href="{{ url_for('download_excel') }}">Download Instruments Excel</a></p>
-  {% endif %}
+  <div class="container">
+    <h1>MDB Tools</h1>
+    <a class="button" href="{{ url_for('export_page') }}">Export Instruments</a>
+    <a class="button" href="{{ url_for('import_excel') }}">Update From Excel</a>
+  </div>
+</body>
+</html>
+"""
+
+EXPORT_TEMPLATE = """
+<!doctype html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <title>Export Instruments</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f2f2f2; margin:40px; }
+    .container { max-width:600px; margin:auto; background:#fff; padding:40px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
+    #file-name { margin-left:10px; }
+    button { padding:8px 16px; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Export Instruments</h1>
+    <form method="post" enctype="multipart/form-data">
+      <input id="mdb-file" type="file" name="file" accept=".mdb" style="display:none" />
+      <button type="button" onclick="document.getElementById('mdb-file').click()">Select File</button>
+      <span id="file-name"></span>
+      <button type="submit">Upload</button>
+    </form>
+    <script>
+      const input = document.getElementById('mdb-file');
+      const fileName = document.getElementById('file-name');
+      input.addEventListener('change', () => {
+        const file = input.files[0];
+        fileName.textContent = file ? file.name : '';
+      });
+    </script>
+    {% if message %}
+    <p>{{ message }}</p>
+    {% endif %}
+    {% if excel_available %}
+    <p><a href="{{ url_for('download_excel') }}">Download Instruments Excel</a></p>
+    {% endif %}
+    <p><a href="{{ url_for('home') }}">Back to Home</a></p>
+  </div>
 </body>
 </html>
 """
@@ -245,43 +280,48 @@ IMPORT_TEMPLATE = """
   <meta charset='utf-8'>
   <title>Update MDB</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; }
-    .file-name { margin-left: 10px; }
+    body { font-family: Arial, sans-serif; background:#f2f2f2; margin:40px; }
+    .container { max-width:600px; margin:auto; background:#fff; padding:40px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
+    .file-name { margin-left:10px; }
+    button { padding:8px 16px; margin-top:10px; }
   </style>
 </head>
 <body>
-  <h1>Update MDB From Excel</h1>
-  <form method="post" enctype="multipart/form-data">
-    <input id="mdb" type="file" name="mdb" accept=".mdb" style="display:none" />
-    <button type="button" onclick="document.getElementById('mdb').click()">Select MDB</button>
-    <span id="mdb-name" class="file-name"></span>
-    <br/><br/>
-    <input id="excel" type="file" name="excel" accept=".xlsx" style="display:none" />
-    <button type="button" onclick="document.getElementById('excel').click()">Select Excel</button>
-    <span id="excel-name" class="file-name"></span>
-    <br/><br/>
-    <button type="submit">Upload</button>
-  </form>
-  <script>
-    const mdbInput = document.getElementById('mdb');
-    const mdbName = document.getElementById('mdb-name');
-    mdbInput.addEventListener('change', () => {
-      const file = mdbInput.files[0];
-      mdbName.textContent = file ? file.name : '';
-    });
-    const excelInput = document.getElementById('excel');
-    const excelName = document.getElementById('excel-name');
-    excelInput.addEventListener('change', () => {
-      const file = excelInput.files[0];
-      excelName.textContent = file ? file.name : '';
-    });
-  </script>
-  {% if message %}
-  <p>{{ message }}</p>
-  {% endif %}
-  {% if mdb_available %}
-  <p><a href="{{ url_for('download_updated_mdb') }}">Download Updated MDB</a></p>
-  {% endif %}
+  <div class="container">
+    <h1>Update MDB From Excel</h1>
+    <form method="post" enctype="multipart/form-data">
+      <input id="mdb" type="file" name="mdb" accept=".mdb" style="display:none" />
+      <button type="button" onclick="document.getElementById('mdb').click()">Select MDB</button>
+      <span id="mdb-name" class="file-name"></span>
+      <br/><br/>
+      <input id="excel" type="file" name="excel" accept=".xlsx" style="display:none" />
+      <button type="button" onclick="document.getElementById('excel').click()">Select Excel</button>
+      <span id="excel-name" class="file-name"></span>
+      <br/><br/>
+      <button type="submit">Upload</button>
+    </form>
+    <script>
+      const mdbInput = document.getElementById('mdb');
+      const mdbName = document.getElementById('mdb-name');
+      mdbInput.addEventListener('change', () => {
+        const file = mdbInput.files[0];
+        mdbName.textContent = file ? file.name : '';
+      });
+      const excelInput = document.getElementById('excel');
+      const excelName = document.getElementById('excel-name');
+      excelInput.addEventListener('change', () => {
+        const file = excelInput.files[0];
+        excelName.textContent = file ? file.name : '';
+      });
+    </script>
+    {% if message %}
+    <p>{{ message }}</p>
+    {% endif %}
+    {% if mdb_available %}
+    <p><a href="{{ url_for('download_updated_mdb') }}">Download Updated MDB</a></p>
+    {% endif %}
+    <p><a href="{{ url_for('home') }}">Back to Home</a></p>
+  </div>
 </body>
 </html>
 """
@@ -290,8 +330,14 @@ app = Flask(__name__)
 app.config['EXCEL_PATH'] = None
 app.config['UPDATED_MDB_PATH'] = None
 
-@app.route('/', methods=['GET', 'POST'])
-def upload_file():
+@app.route('/')
+def home():
+    """Landing page allowing navigation to export or import tools."""
+    return render_template_string(HOME_TEMPLATE)
+
+
+@app.route('/export', methods=['GET', 'POST'])
+def export_page():
     message = None
     excel_available = False
 
@@ -334,7 +380,7 @@ def upload_file():
                 os.remove(mdb_path)
 
     return render_template_string(
-        HTML_TEMPLATE,
+        EXPORT_TEMPLATE,
         message=message,
         excel_available=excel_available,
     )
