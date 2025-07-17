@@ -1,9 +1,9 @@
 # MDB Web Server
 
 This repository contains a small Flask application that allows uploading a
-Microsoft Access `.mdb` file. After uploading, the server lists the tables
-found in the database and shows a preview of the first table using the
-Microsoft Access ODBC driver via `pyodbc`.
+Microsoft Access `.mdb` file. After uploading, the server exports the
+`Instruments` table to CSV and reports how many valid instruments were found
+using the Microsoft Access ODBC driver via `pyodbc`.
 
 ## Requirements
 
@@ -32,17 +32,20 @@ python server.py
 ```
 
 Then open your browser to [http://localhost:5000](http://localhost:5000)
-and upload an `.mdb` file to view its tables. After uploading the server also
-exports the `Instruments` table to a CSV file and presents a link to download
-the file.
+and upload an `.mdb` file. After uploading, the server exports the
+`Instruments` table to a CSV file and presents a link to download the file,
+reporting how many instruments were found.
 
 ## Exporting Instrument Data
 
 The `export_instruments.py` script allows exporting selected columns from the
 `Instruments` table of an MDB file. It filters rows where the `Type` column is
 `IO` **and where the `Tag` column is not blank**. The script writes the columns
-`Tag`, `FullDescription`, `EGULow`, `EGUHigh`, `RawLow`, and `RawHigh` to a CSV
-file.
+`Tag`, `FullDescription`, `EGULow`, `EGUHigh`, `RawLow`, `RawHigh` and several
+alarm/warning fields to a CSV file. The additional columns are `HALM_EN`,
+`HALM_SP`, `HALM_DB`, `HALM_DLY`, `HWARN_EN`, `HWARN_SP`, `HWARN_DB`,
+`HWARN_DLY`, `LALM_EN`, `LALM_SP`, `LALM_DB`, `LALM_DLY`, `LWARN_EN`,
+`LWARN_SP`, `LWARN_DB`, and `LWARN_DLY`.
 
 Usage:
 
