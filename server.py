@@ -21,7 +21,7 @@ def export_instruments_to_csv(mdb_path: str, csv_path: str) -> int:
     cursor = conn.cursor()
     query = (
         "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh "
-        "FROM Instruments WHERE Type='IO'"
+        "FROM Instruments WHERE Type='IO' AND Tag <> '' AND Tag IS NOT NULL"
     )
     cursor.execute(query)
     rows = cursor.fetchall()
