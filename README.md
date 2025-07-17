@@ -32,7 +32,9 @@ python server.py
 ```
 
 Then open your browser to [http://localhost:5000](http://localhost:5000)
-and upload an `.mdb` file to view its tables.
+and upload an `.mdb` file to view its tables. After uploading the server also
+exports the `Instruments` table to a CSV file and presents a link to download
+the file.
 
 ## Exporting Instrument Data
 
