@@ -33,3 +33,18 @@ python server.py
 
 Then open your browser to [http://localhost:5000](http://localhost:5000)
 and upload an `.mdb` file to view its tables.
+
+## Exporting Instrument Data
+
+The `export_instruments.py` script allows exporting selected columns from the
+`Instruments` table of an MDB file. It filters rows where the `Type` column is
+`IO` and writes the columns `Tag`, `FullDescription`, `EGULow`, `EGUHigh`,
+`RawLow`, and `RawHigh` to a CSV file.
+
+Usage:
+
+```bash
+python export_instruments.py path/to/database.mdb
+```
+
+After running, the script prompts for the destination path of the CSV file.
