@@ -1,5 +1,6 @@
 import os
 import tempfile
+import csv
 
 import pyodbc
 from flask import (
@@ -215,7 +216,7 @@ HOME_TEMPLATE = """
 <html lang='en'>
 <head>
   <meta charset='utf-8'>
-  <title>MDB Tools</title>
+  <title>PLCPoke 2.0</title>
   <style>
     body { font-family: Arial, sans-serif; background:#f2f2f2; margin:40px; }
     .container { max-width: 600px; margin:auto; background:#fff; padding:40px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); text-align:center; }
@@ -224,7 +225,7 @@ HOME_TEMPLATE = """
 </head>
 <body>
   <div class="container">
-    <h1>MDB Tools</h1>
+    <h1>PLCPoke 2.0</h1>
     <a class="button" href="{{ url_for('export_page') }}">Export Instruments</a>
     <a class="button" href="{{ url_for('import_excel') }}">Update From Excel</a>
     <a class="button" href="{{ url_for('plc_page') }}">Read PLC Info</a>
@@ -365,6 +366,14 @@ PLC_TEMPLATE = """
       <li>Keyswitch: {{ info.keyswitch }}</li>
       <li>Name: {{ info.name }}</li>
     </ul>
+    <form method="post" action="{{ url_for('plc_tags') }}">
+      <input type="hidden" name="ip" value="{{ request.form.get('ip', '') }}" />
+      <input type="hidden" name="slot" value="{{ request.form.get('slot', '0') }}" />
+      <button type="submit">Get Tag List</button>
+    </form>
+    {% endif %}
+    {% if tags_available %}
+    <p><a href="{{ url_for('download_tags') }}">Download Tag CSV</a></p>
     {% endif %}
     <p><a href="{{ url_for('home') }}">Back to Home</a></p>
   </div>
@@ -375,6 +384,7 @@ PLC_TEMPLATE = """
 app = Flask(__name__)
 app.config['EXCEL_PATH'] = None
 app.config['UPDATED_MDB_PATH'] = None
+app.config['TAG_CSV_PATH'] = None
 
 @app.route('/')
 def home():
@@ -507,11 +517,87 @@ def download_updated_mdb():
     return send_file(mdb_path, as_attachment=True, download_name='updated.mdb')
 
 
+@app.route('/plc/tags', methods=['POST'])
+def plc_tags():
+    """Retrieve tag list from the PLC and store as CSV."""
+    info = None
+    message = None
+    tags_available = False
+
+    ip = request.form.get('ip', '').strip()
+    slot = request.form.get('slot', '0').strip()
+    if ip:
+        path = f"{ip}/{slot}" if slot else ip
+        try:
+            with LogixDriver(path) as plc:
+                plc.get_plc_info()
+                info = {k: plc.info.get(k) for k in (
+                    'vendor',
+                    'product_type',
+                    'product_code',
+                    'revision',
+                    'serial',
+                    'product_name',
+                    'keyswitch',
+                    'name',
+                )}
+
+                tags = plc.get_tag_list()
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp:
+                if tags:
+                    fieldnames = sorted(tags[0].keys())
+                    writer = csv.DictWriter(tmp, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for t in tags:
+                        writer.writerow({k: t.get(k, '') for k in fieldnames})
+                else:
+                    writer = csv.writer(tmp)
+                    writer.writerow(['No tags found'])
+
+                csv_path = tmp.name
+
+            app.config['TAG_CSV_PATH'] = csv_path
+            tags_available = True
+            message = f'Tag list retrieved ({len(tags)} tags).'
+        except Exception as exc:
+            message = f'Error retrieving tag list: {exc}'
+    else:
+        message = 'IP address is required.'
+
+    return render_template_string(
+        PLC_TEMPLATE,
+        info=info,
+        message=message,
+        tags_available=tags_available,
+    )
+
+
+@app.route('/download_tags')
+def download_tags():
+    """Allow the user to download the generated tag CSV file."""
+    csv_path = app.config.get('TAG_CSV_PATH')
+    if not csv_path or not os.path.exists(csv_path):
+        return "No tag CSV available", 404
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(csv_path)
+        except Exception:
+            pass
+        app.config['TAG_CSV_PATH'] = None
+        return response
+
+    return send_file(csv_path, as_attachment=True, download_name='tags.csv')
+
+
 @app.route('/plc', methods=['GET', 'POST'])
 def plc_page():
     """Connect to a PLC and display basic information."""
     info = None
     message = None
+    tags_available = False
 
     if request.method == 'POST':
         ip = request.form.get('ip', '').strip()
@@ -540,6 +626,7 @@ def plc_page():
         PLC_TEMPLATE,
         info=info,
         message=message,
+        tags_available=tags_available,
     )
 
 if __name__ == '__main__':
