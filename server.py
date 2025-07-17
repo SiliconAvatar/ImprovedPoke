@@ -9,22 +9,34 @@ from flask import Flask, request, render_template_string, send_file, after_this_
 def export_instruments_to_csv(mdb_path: str, csv_path: str) -> int:
     """Export the Instruments table to a CSV file.
 
-    Only rows with Type='IO' are exported and the columns Tag,
-    FullDescription, EGULow, EGUHigh, RawLow and RawHigh are written.
-    Returns the number of rows exported.
+    Only rows with Type='IO' are exported. The columns Tag, FullDescription,
+    EGULow, EGUHigh, RawLow, RawHigh and a set of alarm/warning columns are
+    written. Returns the number of rows exported.
     """
+
     conn_str = (
         r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
         f'DBQ={mdb_path};'
     )
     conn = pyodbc.connect(conn_str, autocommit=True)
     cursor = conn.cursor()
+
+    # Verify the Instruments table exists
+    table_names = [row.table_name for row in cursor.tables(tableType='TABLE')]
+    if 'Instruments' not in table_names:
+        raise ValueError('Instruments table not found')
+
     query = (
-        "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh "
+        "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh, "
+        "HALM_EN, HALM_SP, HALM_DB, HALM_DLY, "
+        "HWARN_EN, HWARN_SP, HWARN_DB, HWARN_DLY, "
+        "LALM_EN, LALM_SP, LALM_DB, LALM_DLY, "
+        "LWARN_EN, LWARN_SP, LWARN_DB, LWARN_DLY "
         "FROM Instruments WHERE Type='IO' AND Tag <> '' AND Tag IS NOT NULL"
     )
     cursor.execute(query)
     rows = cursor.fetchall()
+
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow([
@@ -34,9 +46,26 @@ def export_instruments_to_csv(mdb_path: str, csv_path: str) -> int:
             'EGUHigh',
             'RawLow',
             'RawHigh',
+            'HALM_EN',
+            'HALM_SP',
+            'HALM_DB',
+            'HALM_DLY',
+            'HWARN_EN',
+            'HWARN_SP',
+            'HWARN_DB',
+            'HWARN_DLY',
+            'LALM_EN',
+            'LALM_SP',
+            'LALM_DB',
+            'LALM_DLY',
+            'LWARN_EN',
+            'LWARN_SP',
+            'LWARN_DB',
+            'LWARN_DLY',
         ])
         for row in rows:
             writer.writerow(row)
+
     conn.close()
     return len(rows)
 
@@ -67,17 +96,8 @@ HTML_TEMPLATE = """
       fileName.textContent = file ? file.name : '';
     });
   </script>
-  {% if tables %}
-  <h2>Tables</h2>
-  <ul>
-  {% for t in tables %}
-    <li>{{ t }}</li>
-  {% endfor %}
-  </ul>
-  {% endif %}
-  {% if preview %}
-  <h2>Preview of {{ preview.table }}</h2>
-  <pre>{{ preview.data }}</pre>
+  {% if message %}
+  <p>{{ message }}</p>
   {% endif %}
   {% if csv_available %}
   <p><a href="{{ url_for('download_csv') }}">Download Instruments CSV</a></p>
@@ -91,56 +111,50 @@ app.config['CSV_PATH'] = None
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
-    tables = []
-    preview = None
+    message = None
     csv_available = False
+
     if request.method == 'POST':
         file = request.files.get('file')
         if file and file.filename:
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mdb') as tmp:
                 file.save(tmp.name)
                 mdb_path = tmp.name
+
             with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as csv_tmp:
                 csv_path = csv_tmp.name
+
             conn_str = (
                 r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
                 f'DBQ={mdb_path};'
             )
+
             try:
                 conn = pyodbc.connect(conn_str, autocommit=True)
                 cursor = conn.cursor()
-                tables = [row.table_name for row in cursor.tables(tableType='TABLE')]
-                if tables:
-                    first = tables[0]
-                    cursor.execute(f'SELECT * FROM [{first}]')
-                    rows = cursor.fetchmany(5)
-                    columns = [col[0] for col in cursor.description]
-                    lines = [', '.join(columns)]
-                    for r in rows:
-                        lines.append(', '.join(str(item) for item in r))
-                    preview = {
-                        'table': first,
-                        'data': '\n'.join(lines)
-                    }
+                table_names = [row.table_name for row in cursor.tables(tableType='TABLE')]
+
+                if 'Instruments' not in table_names:
+                    message = 'Uploaded file does not contain an Instruments table.'
+                else:
+                    count = export_instruments_to_csv(mdb_path, csv_path)
+                    app.config['CSV_PATH'] = csv_path
+                    csv_available = True
+                    message = f'MDB upload successful. Found {count} valid instruments.'
+
                 conn.close()
-                export_instruments_to_csv(mdb_path, csv_path)
-                app.config['CSV_PATH'] = csv_path
-                csv_available = True
-            except pyodbc.Error as e:
-                preview = {
-                    'table': 'Error',
-                    'data': f'Error accessing MDB file: {e}'
-                }
+            except (pyodbc.Error, ValueError) as e:
+                message = f'Error accessing MDB file: {e}'
                 try:
                     os.remove(csv_path)
                 except Exception:
                     pass
             finally:
                 os.remove(mdb_path)
+
     return render_template_string(
         HTML_TEMPLATE,
-        tables=tables,
-        preview=preview,
+        message=message,
         csv_available=csv_available,
     )
 

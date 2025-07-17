@@ -22,8 +22,16 @@ def main():
     try:
         conn = pyodbc.connect(conn_str, autocommit=True)
         cursor = conn.cursor()
+        table_names = [row.table_name for row in cursor.tables(tableType='TABLE')]
+        if 'Instruments' not in table_names:
+            print('Instruments table not found in the MDB file.')
+            return
         query = (
-            "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh "
+            "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh, "
+            "HALM_EN, HALM_SP, HALM_DB, HALM_DLY, "
+            "HWARN_EN, HWARN_SP, HWARN_DB, HWARN_DLY, "
+            "LALM_EN, LALM_SP, LALM_DB, LALM_DLY, "
+            "LWARN_EN, LWARN_SP, LWARN_DB, LWARN_DLY "
             "FROM Instruments WHERE Type='IO' AND Tag <> '' AND Tag IS NOT NULL"
         )
         cursor.execute(query)
@@ -44,7 +52,30 @@ def main():
 
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['Tag', 'FullDescription', 'EGULow', 'EGUHigh', 'RawLow', 'RawHigh'])
+        writer.writerow([
+            'Tag',
+            'FullDescription',
+            'EGULow',
+            'EGUHigh',
+            'RawLow',
+            'RawHigh',
+            'HALM_EN',
+            'HALM_SP',
+            'HALM_DB',
+            'HALM_DLY',
+            'HWARN_EN',
+            'HWARN_SP',
+            'HWARN_DB',
+            'HWARN_DLY',
+            'LALM_EN',
+            'LALM_SP',
+            'LALM_DB',
+            'LALM_DLY',
+            'LWARN_EN',
+            'LWARN_SP',
+            'LWARN_DB',
+            'LWARN_DLY',
+        ])
         for row in rows:
             writer.writerow(row)
     print(f'Exported {len(rows)} rows to {output_path}')
