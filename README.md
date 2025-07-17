@@ -13,11 +13,12 @@ were found using the Microsoft Access ODBC driver via `pyodbc` and
 * `pyodbc` package
 * Microsoft Access ODBC driver (installed with Microsoft Office/Access)
 * `openpyxl` package
+* `pycomm3` package
 
 You can install the Python dependencies with:
 
 ```bash
-pip install flask pyodbc openpyxl
+pip install flask pyodbc openpyxl pycomm3
 ```
 
 This application requires the Microsoft Access ODBC driver. On Windows this
@@ -35,10 +36,12 @@ python server.py
 
 Then open your browser to [http://localhost:5000](http://localhost:5000).
 You'll see a simple home page where you can choose to export instruments to
-Excel or update an MDB from an exported Excel workbook. Selecting **Export
-Instruments** presents a form to upload an `.mdb` file. After uploading, the
-server exports the `Instruments` table to an Excel workbook and provides a link
-to download it, reporting how many instruments were found.
+Excel, update an MDB from an exported Excel workbook, or read PLC
+information. Selecting **Export Instruments** presents a form to upload an
+`.mdb` file. After uploading, the server exports the `Instruments` table to an
+Excel workbook and provides a link to download it, reporting how many
+instruments were found. The **Read PLC Info** option opens a page to enter a
+PLC IP address and slot number and displays basic details from the controller.
 
 
 ## Updating an MDB from Excel
