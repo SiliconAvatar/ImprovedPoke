@@ -1,8 +1,8 @@
-import csv
 import os
 import sys
 
 import pyodbc
+from openpyxl import Workbook
 
 
 def main():
@@ -31,7 +31,8 @@ def main():
             "HALM_EN, HALM_SP, HALM_DB, HALM_DLY, "
             "HWARN_EN, HWARN_SP, HWARN_DB, HWARN_DLY, "
             "LALM_EN, LALM_SP, LALM_DB, LALM_DLY, "
-            "LWARN_EN, LWARN_SP, LWARN_DB, LWARN_DLY "
+            "LWARN_EN, LWARN_SP, LWARN_DB, LWARN_DLY, "
+            "DigitalInput, DigitalOutput, AnalogInput, AnalogOutput "
             "FROM Instruments WHERE Type='IO' AND Tag <> '' AND Tag IS NOT NULL"
         )
         cursor.execute(query)
@@ -45,40 +46,64 @@ def main():
         except Exception:
             pass
 
-    output_path = input('Enter path to save CSV file: ').strip()
+    output_path = input('Enter path to save Excel file: ').strip()
     if not output_path:
         print('No output path provided')
         return
 
-    with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow([
-            'Tag',
-            'FullDescription',
-            'EGULow',
-            'EGUHigh',
-            'RawLow',
-            'RawHigh',
-            'HALM_EN',
-            'HALM_SP',
-            'HALM_DB',
-            'HALM_DLY',
-            'HWARN_EN',
-            'HWARN_SP',
-            'HWARN_DB',
-            'HWARN_DLY',
-            'LALM_EN',
-            'LALM_SP',
-            'LALM_DB',
-            'LALM_DLY',
-            'LWARN_EN',
-            'LWARN_SP',
-            'LWARN_DB',
-            'LWARN_DLY',
-        ])
-        for row in rows:
-            writer.writerow(row)
-    print(f'Exported {len(rows)} rows to {output_path}')
+    header = [
+        'Tag',
+        'FullDescription',
+        'EGULow',
+        'EGUHigh',
+        'RawLow',
+        'RawHigh',
+        'HALM_EN',
+        'HALM_SP',
+        'HALM_DB',
+        'HALM_DLY',
+        'HWARN_EN',
+        'HWARN_SP',
+        'HWARN_DB',
+        'HWARN_DLY',
+        'LALM_EN',
+        'LALM_SP',
+        'LALM_DB',
+        'LALM_DLY',
+        'LWARN_EN',
+        'LWARN_SP',
+        'LWARN_DB',
+        'LWARN_DLY',
+    ]
+
+    categories = {
+        'DigitalInput': [],
+        'DigitalOutput': [],
+        'AnalogInput': [],
+        'AnalogOutput': [],
+    }
+
+    for row in rows:
+        if getattr(row, 'DigitalInput', False):
+            categories['DigitalInput'].append(row)
+        elif getattr(row, 'DigitalOutput', False):
+            categories['DigitalOutput'].append(row)
+        elif getattr(row, 'AnalogInput', False):
+            categories['AnalogInput'].append(row)
+        elif getattr(row, 'AnalogOutput', False):
+            categories['AnalogOutput'].append(row)
+
+    wb = Workbook()
+    default_sheet = wb.active
+    wb.remove(default_sheet)
+    for name, rows_list in categories.items():
+        ws = wb.create_sheet(name)
+        ws.append(header)
+        for row in rows_list:
+            ws.append(row[:len(header)])
+
+    wb.save(output_path)
+    print(f'Exported {sum(len(v) for v in categories.values())} rows to {output_path}')
 
 
 if __name__ == '__main__':
