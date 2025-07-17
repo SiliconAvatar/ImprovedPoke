@@ -24,7 +24,7 @@ def main():
         cursor = conn.cursor()
         query = (
             "SELECT Tag, FullDescription, EGULow, EGUHigh, RawLow, RawHigh "
-            "FROM Instruments WHERE Type='IO'"
+            "FROM Instruments WHERE Type='IO' AND Tag <> '' AND Tag IS NOT NULL"
         )
         cursor.execute(query)
         rows = cursor.fetchall()

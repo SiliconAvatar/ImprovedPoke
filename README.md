@@ -40,8 +40,9 @@ the file.
 
 The `export_instruments.py` script allows exporting selected columns from the
 `Instruments` table of an MDB file. It filters rows where the `Type` column is
-`IO` and writes the columns `Tag`, `FullDescription`, `EGULow`, `EGUHigh`,
-`RawLow`, and `RawHigh` to a CSV file.
+`IO` **and where the `Tag` column is not blank**. The script writes the columns
+`Tag`, `FullDescription`, `EGULow`, `EGUHigh`, `RawLow`, and `RawHigh` to a CSV
+file.
 
 Usage:
 
