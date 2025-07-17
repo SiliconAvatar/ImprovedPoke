@@ -40,24 +40,6 @@ Instruments** presents a form to upload an `.mdb` file. After uploading, the
 server exports the `Instruments` table to an Excel workbook and provides a link
 to download it, reporting how many instruments were found.
 
-## Exporting Instrument Data
-
-The `export_instruments.py` script allows exporting selected columns from the
-`Instruments` table of an MDB file. It filters rows where the `Type` column is
-`IO` **and where the `Tag` column is not blank**. The script writes the columns
-`ID`, `Tag`, `FullDescription`, `EGULow`, `EGUHigh`, `RawLow`, `RawHigh` and several
-alarm/warning fields to an Excel workbook. The additional columns are `HALM_EN`,
-`HALM_SP`, `HALM_DB`, `HALM_DLY`, `HWARN_EN`, `HWARN_SP`, `HWARN_DB`,
-`HWARN_DLY`, `LALM_EN`, `LALM_SP`, `LALM_DB`, `LALM_DLY`, `LWARN_EN`,
-`LWARN_SP`, `LWARN_DB`, and `LWARN_DLY`.
-
-Usage:
-
-```bash
-python export_instruments.py path/to/database.mdb
-```
-
-After running, the script prompts for the destination path of the Excel file.
 
 ## Updating an MDB from Excel
 
