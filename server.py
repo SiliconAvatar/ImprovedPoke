@@ -12,6 +12,7 @@ from flask import (
     url_for,
 )
 from openpyxl import Workbook, load_workbook
+from pycomm3 import LogixDriver
 
 
 def export_instruments_to_excel(mdb_path: str, xlsx_path: str) -> int:
@@ -226,6 +227,7 @@ HOME_TEMPLATE = """
     <h1>MDB Tools</h1>
     <a class="button" href="{{ url_for('export_page') }}">Export Instruments</a>
     <a class="button" href="{{ url_for('import_excel') }}">Update From Excel</a>
+    <a class="button" href="{{ url_for('plc_page') }}">Read PLC Info</a>
   </div>
 </body>
 </html>
@@ -319,6 +321,50 @@ IMPORT_TEMPLATE = """
     {% endif %}
     {% if mdb_available %}
     <p><a href="{{ url_for('download_updated_mdb') }}">Download Updated MDB</a></p>
+    {% endif %}
+    <p><a href="{{ url_for('home') }}">Back to Home</a></p>
+  </div>
+</body>
+</html>
+"""
+
+PLC_TEMPLATE = """
+<!doctype html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <title>Read PLC Info</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f2f2f2; margin:40px; }
+    .container { max-width:600px; margin:auto; background:#fff; padding:40px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
+    label { display:block; margin-top:10px; }
+    input { padding:6px; margin-left:10px; }
+    button { padding:8px 16px; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Read PLC Info</h1>
+    <form method="post">
+      <label>IP Address: <input type="text" name="ip" value="{{ request.form.get('ip', '') }}"/></label>
+      <label>Slot: <input type="text" name="slot" value="{{ request.form.get('slot', '0') }}"/></label>
+      <button type="submit">Connect</button>
+    </form>
+    {% if message %}
+    <p>{{ message }}</p>
+    {% endif %}
+    {% if info %}
+    <h2>Information</h2>
+    <ul>
+      <li>Vendor: {{ info.vendor }}</li>
+      <li>Product Type: {{ info.product_type }}</li>
+      <li>Product Code: {{ info.product_code }}</li>
+      <li>Revision: {{ info.revision.major }}.{{ info.revision.minor }}</li>
+      <li>Serial: {{ info.serial }}</li>
+      <li>Product Name: {{ info.product_name }}</li>
+      <li>Keyswitch: {{ info.keyswitch }}</li>
+      <li>Name: {{ info.name }}</li>
+    </ul>
     {% endif %}
     <p><a href="{{ url_for('home') }}">Back to Home</a></p>
   </div>
@@ -459,6 +505,42 @@ def download_updated_mdb():
         return response
 
     return send_file(mdb_path, as_attachment=True, download_name='updated.mdb')
+
+
+@app.route('/plc', methods=['GET', 'POST'])
+def plc_page():
+    """Connect to a PLC and display basic information."""
+    info = None
+    message = None
+
+    if request.method == 'POST':
+        ip = request.form.get('ip', '').strip()
+        slot = request.form.get('slot', '0').strip()
+        if ip:
+            path = f"{ip}/{slot}" if slot else ip
+            try:
+                with LogixDriver(path) as plc:
+                    plc.get_plc_info()
+                    info = {k: plc.info.get(k) for k in (
+                        'vendor',
+                        'product_type',
+                        'product_code',
+                        'revision',
+                        'serial',
+                        'product_name',
+                        'keyswitch',
+                        'name',
+                    )}
+            except Exception as exc:
+                message = f'Error connecting to PLC: {exc}'
+        else:
+            message = 'IP address is required.'
+
+    return render_template_string(
+        PLC_TEMPLATE,
+        info=info,
+        message=message,
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
