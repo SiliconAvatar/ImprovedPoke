@@ -2,8 +2,9 @@
 
 This repository contains a small Flask application that allows uploading a
 Microsoft Access `.mdb` file. After uploading, the server exports the
-`Instruments` table to CSV and reports how many valid instruments were found
-using the Microsoft Access ODBC driver via `pyodbc`.
+`Instruments` table to an Excel workbook and reports how many valid instruments
+were found using the Microsoft Access ODBC driver via `pyodbc` and
+`openpyxl`.
 
 ## Requirements
 
@@ -11,11 +12,12 @@ using the Microsoft Access ODBC driver via `pyodbc`.
 * `Flask` Python package
 * `pyodbc` package
 * Microsoft Access ODBC driver (installed with Microsoft Office/Access)
+* `openpyxl` package
 
 You can install the Python dependencies with:
 
 ```bash
-pip install flask pyodbc
+pip install flask pyodbc openpyxl
 ```
 
 This application requires the Microsoft Access ODBC driver. On Windows this
@@ -33,8 +35,8 @@ python server.py
 
 Then open your browser to [http://localhost:5000](http://localhost:5000)
 and upload an `.mdb` file. After uploading, the server exports the
-`Instruments` table to a CSV file and presents a link to download the file,
-reporting how many instruments were found.
+`Instruments` table to an Excel workbook and presents a link to download the
+file, reporting how many instruments were found.
 
 ## Exporting Instrument Data
 
@@ -42,7 +44,7 @@ The `export_instruments.py` script allows exporting selected columns from the
 `Instruments` table of an MDB file. It filters rows where the `Type` column is
 `IO` **and where the `Tag` column is not blank**. The script writes the columns
 `Tag`, `FullDescription`, `EGULow`, `EGUHigh`, `RawLow`, `RawHigh` and several
-alarm/warning fields to a CSV file. The additional columns are `HALM_EN`,
+alarm/warning fields to an Excel workbook. The additional columns are `HALM_EN`,
 `HALM_SP`, `HALM_DB`, `HALM_DLY`, `HWARN_EN`, `HWARN_SP`, `HWARN_DB`,
 `HWARN_DLY`, `LALM_EN`, `LALM_SP`, `LALM_DB`, `LALM_DLY`, `LWARN_EN`,
 `LWARN_SP`, `LWARN_DB`, and `LWARN_DLY`.
@@ -53,4 +55,4 @@ Usage:
 python export_instruments.py path/to/database.mdb
 ```
 
-After running, the script prompts for the destination path of the CSV file.
+After running, the script prompts for the destination path of the Excel file.

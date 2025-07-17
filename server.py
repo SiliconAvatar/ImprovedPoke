@@ -1,17 +1,18 @@
 import os
-import csv
 import tempfile
 
 import pyodbc
 from flask import Flask, request, render_template_string, send_file, after_this_request
+from openpyxl import Workbook
 
 
-def export_instruments_to_csv(mdb_path: str, csv_path: str) -> int:
-    """Export the Instruments table to a CSV file.
+def export_instruments_to_excel(mdb_path: str, xlsx_path: str) -> int:
+    """Export the Instruments table to an Excel workbook.
 
     Only rows with Type='IO' are exported. The columns Tag, FullDescription,
     EGULow, EGUHigh, RawLow, RawHigh and a set of alarm/warning columns are
-    written. Returns the number of rows exported.
+    written. The instruments are grouped into DigitalInput, DigitalOutput,
+    AnalogInput and AnalogOutput sheets. Returns the number of rows exported.
     """
 
     conn_str = (
@@ -31,43 +32,69 @@ def export_instruments_to_csv(mdb_path: str, csv_path: str) -> int:
         "HALM_EN, HALM_SP, HALM_DB, HALM_DLY, "
         "HWARN_EN, HWARN_SP, HWARN_DB, HWARN_DLY, "
         "LALM_EN, LALM_SP, LALM_DB, LALM_DLY, "
-        "LWARN_EN, LWARN_SP, LWARN_DB, LWARN_DLY "
+        "LWARN_EN, LWARN_SP, LWARN_DB, LWARN_DLY, "
+        "DigitalInput, DigitalOutput, AnalogInput, AnalogOutput "
         "FROM Instruments WHERE Type='IO' AND Tag <> '' AND Tag IS NOT NULL"
     )
     cursor.execute(query)
     rows = cursor.fetchall()
 
-    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow([
-            'Tag',
-            'FullDescription',
-            'EGULow',
-            'EGUHigh',
-            'RawLow',
-            'RawHigh',
-            'HALM_EN',
-            'HALM_SP',
-            'HALM_DB',
-            'HALM_DLY',
-            'HWARN_EN',
-            'HWARN_SP',
-            'HWARN_DB',
-            'HWARN_DLY',
-            'LALM_EN',
-            'LALM_SP',
-            'LALM_DB',
-            'LALM_DLY',
-            'LWARN_EN',
-            'LWARN_SP',
-            'LWARN_DB',
-            'LWARN_DLY',
-        ])
-        for row in rows:
-            writer.writerow(row)
+    header = [
+        'Tag',
+        'FullDescription',
+        'EGULow',
+        'EGUHigh',
+        'RawLow',
+        'RawHigh',
+        'HALM_EN',
+        'HALM_SP',
+        'HALM_DB',
+        'HALM_DLY',
+        'HWARN_EN',
+        'HWARN_SP',
+        'HWARN_DB',
+        'HWARN_DLY',
+        'LALM_EN',
+        'LALM_SP',
+        'LALM_DB',
+        'LALM_DLY',
+        'LWARN_EN',
+        'LWARN_SP',
+        'LWARN_DB',
+        'LWARN_DLY',
+    ]
+
+    categories = {
+        'DigitalInput': [],
+        'DigitalOutput': [],
+        'AnalogInput': [],
+        'AnalogOutput': [],
+    }
+
+    for row in rows:
+        if getattr(row, 'DigitalInput', False):
+            categories['DigitalInput'].append(row)
+        elif getattr(row, 'DigitalOutput', False):
+            categories['DigitalOutput'].append(row)
+        elif getattr(row, 'AnalogInput', False):
+            categories['AnalogInput'].append(row)
+        elif getattr(row, 'AnalogOutput', False):
+            categories['AnalogOutput'].append(row)
+
+    wb = Workbook()
+    default_sheet = wb.active
+    wb.remove(default_sheet)
+
+    for name, rows_list in categories.items():
+        ws = wb.create_sheet(name)
+        ws.append(header)
+        for row in rows_list:
+            ws.append(row[:len(header)])
+
+    wb.save(xlsx_path)
 
     conn.close()
-    return len(rows)
+    return sum(len(v) for v in categories.values())
 
 HTML_TEMPLATE = """
 <!doctype html>
@@ -99,20 +126,20 @@ HTML_TEMPLATE = """
   {% if message %}
   <p>{{ message }}</p>
   {% endif %}
-  {% if csv_available %}
-  <p><a href="{{ url_for('download_csv') }}">Download Instruments CSV</a></p>
+  {% if excel_available %}
+  <p><a href="{{ url_for('download_excel') }}">Download Instruments Excel</a></p>
   {% endif %}
 </body>
 </html>
 """
 
 app = Flask(__name__)
-app.config['CSV_PATH'] = None
+app.config['EXCEL_PATH'] = None
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     message = None
-    csv_available = False
+    excel_available = False
 
     if request.method == 'POST':
         file = request.files.get('file')
@@ -121,8 +148,8 @@ def upload_file():
                 file.save(tmp.name)
                 mdb_path = tmp.name
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as csv_tmp:
-                csv_path = csv_tmp.name
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as xlsx_tmp:
+                xlsx_path = xlsx_tmp.name
 
             conn_str = (
                 r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
@@ -137,16 +164,16 @@ def upload_file():
                 if 'Instruments' not in table_names:
                     message = 'Uploaded file does not contain an Instruments table.'
                 else:
-                    count = export_instruments_to_csv(mdb_path, csv_path)
-                    app.config['CSV_PATH'] = csv_path
-                    csv_available = True
+                    count = export_instruments_to_excel(mdb_path, xlsx_path)
+                    app.config['EXCEL_PATH'] = xlsx_path
+                    excel_available = True
                     message = f'MDB upload successful. Found {count} valid instruments.'
 
                 conn.close()
             except (pyodbc.Error, ValueError) as e:
                 message = f'Error accessing MDB file: {e}'
                 try:
-                    os.remove(csv_path)
+                    os.remove(xlsx_path)
                 except Exception:
                     pass
             finally:
@@ -155,27 +182,27 @@ def upload_file():
     return render_template_string(
         HTML_TEMPLATE,
         message=message,
-        csv_available=csv_available,
+        excel_available=excel_available,
     )
 
 
-@app.route('/download_csv')
-def download_csv():
-    """Send the exported instruments CSV to the client."""
-    csv_path = app.config.get('CSV_PATH')
-    if not csv_path or not os.path.exists(csv_path):
-        return "No CSV file available", 404
+@app.route('/download_excel')
+def download_excel():
+    """Send the exported instruments Excel file to the client."""
+    xlsx_path = app.config.get('EXCEL_PATH')
+    if not xlsx_path or not os.path.exists(xlsx_path):
+        return "No Excel file available", 404
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(csv_path)
+            os.remove(xlsx_path)
         except Exception:
             pass
-        app.config['CSV_PATH'] = None
+        app.config['EXCEL_PATH'] = None
         return response
 
-    return send_file(csv_path, as_attachment=True, download_name='instruments.csv')
+    return send_file(xlsx_path, as_attachment=True, download_name='instruments.xlsx')
 
 if __name__ == '__main__':
     app.run(debug=True)
