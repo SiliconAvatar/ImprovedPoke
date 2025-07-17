@@ -544,7 +544,8 @@ def plc_tags():
 
                 tags = plc.get_tag_list()
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp:
+            # open temporary CSV in text mode so csv module can write strings
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv', mode='w', newline='') as tmp:
                 if tags:
                     fieldnames = sorted(tags[0].keys())
                     writer = csv.DictWriter(tmp, fieldnames=fieldnames)
