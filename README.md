@@ -2,31 +2,26 @@
 
 This repository contains a small Flask application that allows uploading a
 Microsoft Access `.mdb` file. After uploading, the server lists the tables
-found in the database and shows a preview of the first table using
-`mdbtools`.
+found in the database and shows a preview of the first table using the
+Microsoft Access ODBC driver via `pyodbc`.
 
 ## Requirements
 
 * Python 3.11+
 * `Flask` Python package
-* `mdbtools` command line utilities (`mdb-tables`, `mdb-export`)
+* `pyodbc` package
+* Microsoft Access ODBC driver (installed with Microsoft Office/Access)
 
 You can install the Python dependencies with:
 
 ```bash
-pip install flask
+pip install flask pyodbc
 ```
 
-On Debian/Ubuntu systems `mdbtools` can be installed via `apt`:
-
-```bash
-sudo apt-get install mdbtools
-```
-
-On Windows you will need to install a compatible build of `mdbtools` and
-ensure the commands `mdb-tables` and `mdb-export` are available on your
-`PATH`. One approach is to use the Windows Subsystem for Linux (WSL) and
-install `mdbtools` inside the Linux environment.
+This application requires the Microsoft Access ODBC driver. On Windows this
+driver is installed when Microsoft Access or the Access Database Engine is
+present. Ensure the driver name `Microsoft Access Driver (*.mdb, *.accdb)` is
+available on your system.
 
 ## Running
 

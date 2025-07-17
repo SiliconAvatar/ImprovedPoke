@@ -1,6 +1,7 @@
 import os
-import subprocess
 import tempfile
+
+import pyodbc
 from flask import Flask, request, render_template_string
 
 HTML_TEMPLATE = """
@@ -58,20 +59,31 @@ def upload_file():
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mdb') as tmp:
                 file.save(tmp.name)
                 mdb_path = tmp.name
+            conn_str = (
+                r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
+                f'DBQ={mdb_path};'
+            )
             try:
-                output = subprocess.check_output(['mdb-tables', '-1', mdb_path], text=True)
-                tables = [t for t in output.splitlines() if t]
+                conn = pyodbc.connect(conn_str, autocommit=True)
+                cursor = conn.cursor()
+                tables = [row.table_name for row in cursor.tables(tableType='TABLE')]
                 if tables:
                     first = tables[0]
-                    data = subprocess.check_output(['mdb-export', mdb_path, first], text=True)
+                    cursor.execute(f'SELECT * FROM [{first}]')
+                    rows = cursor.fetchmany(5)
+                    columns = [col[0] for col in cursor.description]
+                    lines = [', '.join(columns)]
+                    for r in rows:
+                        lines.append(', '.join(str(item) for item in r))
                     preview = {
                         'table': first,
-                        'data': '\n'.join(data.splitlines()[:5])
+                        'data': '\n'.join(lines)
                     }
-            except FileNotFoundError:
+                conn.close()
+            except pyodbc.Error as e:
                 preview = {
                     'table': 'Error',
-                    'data': 'mdbtools utilities not found. Please install mdbtools and ensure it is in your PATH.'
+                    'data': f'Error accessing MDB file: {e}'
                 }
             finally:
                 os.remove(mdb_path)
